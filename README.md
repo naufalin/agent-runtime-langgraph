@@ -2,12 +2,31 @@
 
 This is a minimal LangGraph ReAct agent runtime using the LangGraph ReAct agent template style, packaged with `uv`.
 
+The backend is split into clear layers (server, agent, observability, utils) so you can add more graphs/agents without rewriting routes.
+
 ## Requirements
 
 - Python 3.11+
 - `uv`
 - A Google GenAI API key
 - A Tavily API key
+- Optional: LangSmith + Langfuse keys (for observability)
+
+## Project Layout
+
+```
+src/react_agent/
+  agent/                 # graph registry and agent wiring
+  observability/         # Langfuse/LangSmith helpers
+  server/
+    app.py               # FastAPI app
+    routes/              # HTTP routes
+  utils/                 # message + SSE helpers
+  graph.py               # default graph
+  prompts.py             # system prompt
+  tools.py               # tool registry
+  cli.py                 # CLI entrypoint
+```
 
 ## Setup
 
@@ -74,7 +93,7 @@ Sessions are keyed by `thread_id` (the conversation thread).
 - Add or modify tools in `src/react_agent/tools.py`.
 - Update the system prompt in `src/react_agent/prompts.py`.
 - Adjust the ReAct loop in `src/react_agent/graph.py`.
-- Add more graphs/agents via `src/react_agent/agent/registry.py`.
+- Register more graphs/agents in `src/react_agent/agent/registry.py`.
 - HTTP routes live in `src/react_agent/server/routes/`.
 - Shared helpers live in `src/react_agent/utils/`.
 
