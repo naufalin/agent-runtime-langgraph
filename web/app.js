@@ -212,13 +212,18 @@ function addToolEvent({ kind, name, detail }) {
 function flushToolEvents() {
   if (!pendingToolEvents.length) return;
   const group = ensureToolGroup();
-  const count = pendingToolEvents.length;
+  appendToolEvents(group, pendingToolEvents);
+  pendingToolEvents = [];
+}
+
+function appendToolEvents(group, events) {
+  const count = events.length;
   const summary = group.wrapper.querySelector(".tool-summary");
   if (summary) {
     summary.textContent = `Tools (${count})`;
   }
 
-  pendingToolEvents.forEach(({ kind, name, detail }) => {
+  events.forEach(({ kind, name, detail }) => {
     const row = document.createElement("div");
     row.className = "tool-row";
 
@@ -241,13 +246,9 @@ function flushToolEvents() {
       group.body.appendChild(pre);
     }
   });
-
-  pendingToolEvents = [];
 }
 
-function ensureToolGroup() {
-  if (activeToolGroup) return activeToolGroup;
-
+function createToolGroup() {
   const wrapper = document.createElement("details");
   wrapper.className = "tool-group";
 
@@ -265,6 +266,15 @@ function ensureToolGroup() {
 
   wrapper.appendChild(summary);
   wrapper.appendChild(body);
+
+  return { wrapper, body, list };
+}
+
+function ensureToolGroup() {
+  if (activeToolGroup) return activeToolGroup;
+
+  const group = createToolGroup();
+  const wrapper = group.wrapper;
 
   const assistantEl = activeAssistantEl;
   if (assistantEl) {
@@ -284,7 +294,7 @@ function ensureToolGroup() {
     }
   }
 
-  activeToolGroup = { wrapper, body, list };
+  activeToolGroup = group;
   return activeToolGroup;
 }
 
@@ -367,8 +377,97 @@ function renderMessageContent(el, role, content) {
   target.textContent = content ?? "";
 }
 
+function payloadToToolEvent(payload) {
+  if (payload.type === "tool_call") {
+    return {
+      kind: "call",
+      name: payload.tool_name,
+      detail: payload.args ? JSON.stringify(payload.args, null, 2) : "",
+    };
+  }
+  if (payload.type === "tool_result") {
+    const content =
+      payload.content && typeof payload.content === "string"
+        ? payload.content
+        : payload.content
+          ? JSON.stringify(payload.content, null, 2)
+          : "";
+    return {
+      kind: "result",
+      name: payload.tool_name,
+      detail: content,
+    };
+  }
+  return null;
+}
+
+function legacyToolMessageToEvent(message) {
+  if (message.role !== "tool") return null;
+  return {
+    kind: "result",
+    name: message.tool_name || "tool",
+    detail: message.content || "",
+  };
+}
+
+function attachHistoryToolEvents(assistantEl, events) {
+  if (!events.length) return;
+  const group = createToolGroup();
+  appendToolEvents(group, events);
+
+  if (assistantEl) {
+    assistantEl.classList.add("has-tools");
+    const contentEl = assistantEl.querySelector(".message-content");
+    if (contentEl) {
+      assistantEl.insertBefore(group.wrapper, contentEl);
+      return;
+    }
+    assistantEl.appendChild(group.wrapper);
+    return;
+  }
+
+  messagesEl.appendChild(group.wrapper);
+}
+
+function renderHistoryMessages(messages) {
+  const pendingToolEventsForAssistant = [];
+
+  messages.forEach((msg) => {
+    const payloadEvents = (msg.payloads || [])
+      .map(payloadToToolEvent)
+      .filter(Boolean);
+    const legacyToolEvent = legacyToolMessageToEvent(msg);
+
+    if (payloadEvents.length) {
+      pendingToolEventsForAssistant.push(...payloadEvents);
+    } else if (legacyToolEvent) {
+      pendingToolEventsForAssistant.push(legacyToolEvent);
+    }
+
+    if (msg.role === "assistant") {
+      if (!msg.content) return;
+      const assistantEl = addMessage("assistant", msg.content);
+      attachHistoryToolEvents(
+        assistantEl,
+        pendingToolEventsForAssistant.splice(0),
+      );
+      return;
+    }
+
+    if (msg.role === "tool") return;
+    if (!msg.content) return;
+    addMessage(msg.role, msg.content);
+  });
+
+  attachHistoryToolEvents(null, pendingToolEventsForAssistant);
+}
+
 async function loadHistory(threadId) {
   messagesEl.innerHTML = "";
+  activeToolGroup = null;
+  activeToolStatus = null;
+  activeAssistantEl = null;
+  pendingToolEvents = [];
   try {
     const res = await fetch(`/api/thread/${threadId}/history`);
     if (res.ok) {
@@ -380,7 +479,7 @@ async function loadHistory(threadId) {
         });
         updateThreadList(threadId);
       }
-      data.messages.forEach((msg) => addMessage(msg.role, msg.content));
+      renderHistoryMessages(data.messages);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       stickToBottom = true;
       return;
@@ -391,7 +490,7 @@ async function loadHistory(threadId) {
   const threads = loadThreads();
   const thread = threads.find((t) => t.id === threadId);
   if (!thread) return;
-  thread.messages.forEach((msg) => addMessage(msg.role, msg.content));
+  renderHistoryMessages(thread.messages);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   stickToBottom = true;
 }

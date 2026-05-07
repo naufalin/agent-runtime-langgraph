@@ -55,7 +55,12 @@ def message_to_dict(message: object) -> dict:
     elif isinstance(message, SystemMessage):
         role = "system"
     content = content_to_text(getattr(message, "content", None))
-    return {"role": role, "content": content}
+    payloads = message_to_payloads(message)
+    result = {"role": role, "content": content, "payloads": payloads}
+    tool_name = getattr(message, "name", None)
+    if tool_name:
+        result["tool_name"] = tool_name
+    return result
 
 
 def content_to_text(content: object) -> str:
