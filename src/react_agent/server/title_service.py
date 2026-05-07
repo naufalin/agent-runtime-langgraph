@@ -32,7 +32,7 @@ def generate_title(messages: list[dict[str, str]]) -> str | None:
         return None
 
     try:
-        model = ChatGoogleGenerativeAI(model=model_name, temperature=0)
+        model = ChatGoogleGenerativeAI(model=model_name)
         response = model.invoke(
             [
                 SystemMessage(content=TITLE_SYSTEM_PROMPT),
