@@ -101,10 +101,14 @@ select {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) 1fr;
-  gap: 18px;
+  grid-template-columns:
+    minmax(220px, var(--sidebar-width, 260px))
+    8px
+    minmax(0, 1fr);
+  gap: 10px;
   align-items: stretch;
   flex: 1;
+  --sidebar-width: 260px;
 }
 
 .sidebar {
@@ -117,6 +121,31 @@ select {
   flex-direction: column;
   gap: 16px;
   min-height: 60vh;
+}
+
+.sidebar-resize {
+  align-self: stretch;
+  border-radius: 999px;
+  cursor: col-resize;
+  position: relative;
+  outline: none;
+  touch-action: none;
+}
+
+.sidebar-resize::before {
+  content: "";
+  position: absolute;
+  inset: 12px 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-resize:hover::before,
+.sidebar-resize:focus-visible::before,
+.sidebar-resize.dragging::before {
+  background: #e3c8b2;
+  box-shadow: 0 0 0 2px rgba(184, 74, 27, 0.12);
 }
 
 .sidebar-header {
@@ -163,14 +192,83 @@ select {
 
 .thread-label {
   flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   color: inherit;
   font-size: 0.95rem;
   font-family: inherit;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   padding: 6px 4px;
+  display: block;
+}
+
+.thread-label-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.thread-label.is-overflowing:hover .thread-label-text,
+.thread-label.is-overflowing:focus-visible .thread-label-text {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: title-marquee 7s ease-in-out infinite;
+}
+
+@keyframes title-marquee {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  58%,
+  72% {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.thread-title-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #e3b395;
+  background: #fffaf6;
+  color: var(--ink);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 6px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-edit {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  height: 28px;
+  padding: 0 7px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.thread-edit:hover {
+  border-color: #e3b395;
+  background: #f7e2d3;
+  color: var(--accent-dark);
 }
 
 .thread-remove {
@@ -189,6 +287,27 @@ select {
 .thread-remove:hover {
   border-color: #e3b395;
   background: #f7e2d3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread-label.is-overflowing:hover .thread-label-text,
+  .thread-label.is-overflowing:focus-visible .thread-label-text {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: none;
+    transform: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-resize {
+    display: none;
+  }
 }
 
 .messages {

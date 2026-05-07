@@ -3,6 +3,8 @@ const messageInput = document.getElementById("messageInput");
 const sendBtn = document.getElementById("sendBtn");
 const newThreadBtn = document.getElementById("newThread");
 const threadList = document.getElementById("threadList");
+const layoutEl = document.querySelector(".layout");
+const sidebarResize = document.getElementById("sidebarResize");
 
 let stickToBottom = true;
 let activeToolGroup = null;
@@ -11,6 +13,7 @@ let activeAssistantEl = null;
 let pendingToolEvents = [];
 let thinkingTimer = null;
 let hasToolActivity = false;
+let editingThreadId = null;
 
 messagesEl.addEventListener("scroll", () => {
   const threshold = 60;
@@ -22,6 +25,10 @@ messagesEl.addEventListener("scroll", () => {
 
 const STORAGE_KEY = "react-agent-threads";
 const CURRENT_KEY = "react-agent-current-thread";
+const SIDEBAR_WIDTH_KEY = "react-agent-sidebar-width";
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 420;
+const SIDEBAR_MOBILE_BREAKPOINT = 760;
 
 function loadThreads() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -45,6 +52,131 @@ function setCurrentThread(id) {
 
 function getCurrentThread() {
   return localStorage.getItem(CURRENT_KEY);
+}
+
+function clampSidebarWidth(width) {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+}
+
+function isSidebarResizeEnabled() {
+  return window.innerWidth > SIDEBAR_MOBILE_BREAKPOINT;
+}
+
+function setSidebarWidth(width) {
+  if (!layoutEl) return;
+  const nextWidth = clampSidebarWidth(width);
+  layoutEl.style.setProperty("--sidebar-width", `${nextWidth}px`);
+  if (sidebarResize) {
+    sidebarResize.setAttribute("aria-valuenow", String(nextWidth));
+  }
+  localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth));
+  requestAnimationFrame(updateOverflowingThreadLabels);
+}
+
+function loadSidebarWidth() {
+  const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  if (Number.isFinite(stored) && stored > 0) {
+    setSidebarWidth(stored);
+  }
+}
+
+function initSidebarResize() {
+  if (!layoutEl || !sidebarResize) return;
+
+  sidebarResize.setAttribute("aria-valuemin", String(SIDEBAR_MIN_WIDTH));
+  sidebarResize.setAttribute("aria-valuemax", String(SIDEBAR_MAX_WIDTH));
+  loadSidebarWidth();
+
+  let dragStartX = 0;
+  let dragStartWidth = 0;
+
+  sidebarResize.addEventListener("pointerdown", (event) => {
+    if (!isSidebarResizeEnabled()) return;
+    event.preventDefault();
+    dragStartX = event.clientX;
+    dragStartWidth = Number(
+      getComputedStyle(layoutEl)
+        .getPropertyValue("--sidebar-width")
+        .replace("px", ""),
+    );
+    if (!Number.isFinite(dragStartWidth) || dragStartWidth <= 0) {
+      dragStartWidth = SIDEBAR_MIN_WIDTH;
+    }
+    sidebarResize.classList.add("dragging");
+    sidebarResize.setPointerCapture(event.pointerId);
+  });
+
+  sidebarResize.addEventListener("pointermove", (event) => {
+    if (!sidebarResize.classList.contains("dragging")) return;
+    setSidebarWidth(dragStartWidth + event.clientX - dragStartX);
+  });
+
+  const endDrag = (event) => {
+    if (!sidebarResize.classList.contains("dragging")) return;
+    sidebarResize.classList.remove("dragging");
+    if (sidebarResize.hasPointerCapture(event.pointerId)) {
+      sidebarResize.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  sidebarResize.addEventListener("pointerup", endDrag);
+  sidebarResize.addEventListener("pointercancel", endDrag);
+
+  sidebarResize.addEventListener("keydown", (event) => {
+    if (!isSidebarResizeEnabled()) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const step = event.shiftKey ? 48 : 16;
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const current = Number(
+      getComputedStyle(layoutEl)
+        .getPropertyValue("--sidebar-width")
+        .replace("px", ""),
+    );
+    setSidebarWidth(
+      (Number.isFinite(current) ? current : SIDEBAR_MIN_WIDTH) +
+        step * direction,
+    );
+  });
+
+  window.addEventListener("resize", () => {
+    sidebarResize.classList.remove("dragging");
+    updateOverflowingThreadLabels();
+  });
+}
+
+function updateOverflowingThreadLabels() {
+  document.querySelectorAll(".thread-label").forEach((label) => {
+    const text = label.querySelector(".thread-label-text");
+    if (!text) return;
+    label.classList.remove("is-overflowing");
+    text.style.removeProperty("--marquee-distance");
+    const overflow = text.scrollWidth > label.clientWidth;
+    if (overflow) {
+      label.classList.add("is-overflowing");
+      text.style.setProperty(
+        "--marquee-distance",
+        `${Math.max(0, text.scrollWidth - label.clientWidth)}px`,
+      );
+    }
+  });
+}
+
+function updateCachedThread(threadId, updates) {
+  const threads = loadThreads();
+  let thread = threads.find((t) => t.id === threadId);
+  if (!thread) {
+    thread = {
+      id: threadId,
+      label: updates.label || "New Session",
+      titleSource: updates.titleSource || "auto",
+      messages: [],
+    };
+    threads.unshift(thread);
+  }
+  Object.assign(thread, updates);
+  saveThreads(threads);
+  return thread;
 }
 
 function addMessage(role, content) {
@@ -241,6 +373,13 @@ async function loadHistory(threadId) {
     const res = await fetch(`/api/thread/${threadId}/history`);
     if (res.ok) {
       const data = await res.json();
+      if (data.title) {
+        updateCachedThread(threadId, {
+          label: data.title,
+          titleSource: data.title_source || "auto",
+        });
+        updateThreadList(threadId);
+      }
       data.messages.forEach((msg) => addMessage(msg.role, msg.content));
       messagesEl.scrollTop = messagesEl.scrollHeight;
       stickToBottom = true;
@@ -266,13 +405,17 @@ function updateThreadList(selectedId) {
       thread.id === selectedId ? " active" : ""
     }`;
 
-    const label = document.createElement("button");
-    label.className = "thread-label";
-    label.textContent = thread.label;
-    label.addEventListener("click", () => {
-      setCurrentThread(thread.id);
-      updateThreadList(thread.id);
-      loadHistory(thread.id);
+    const label = createThreadLabel(thread);
+
+    const edit = document.createElement("button");
+    edit.className = "thread-edit";
+    edit.type = "button";
+    edit.textContent = "Edit";
+    edit.title = "Rename session";
+    edit.addEventListener("click", (event) => {
+      event.stopPropagation();
+      editingThreadId = thread.id;
+      updateThreadList(selectedId);
     });
 
     const remove = document.createElement("button");
@@ -286,31 +429,118 @@ function updateThreadList(selectedId) {
     });
 
     item.appendChild(label);
+    item.appendChild(edit);
     item.appendChild(remove);
     threadList.appendChild(item);
   });
+  requestAnimationFrame(updateOverflowingThreadLabels);
 }
 
-function upsertThread(threadId, label, message) {
+function createThreadLabel(thread) {
+  if (editingThreadId === thread.id) {
+    const input = document.createElement("input");
+    input.className = "thread-title-input";
+    input.value = thread.label || "New Session";
+    input.setAttribute("aria-label", "Session title");
+
+    let committed = false;
+    const finish = async (save) => {
+      if (committed) return;
+      committed = true;
+      const nextTitle = input.value.trim();
+      editingThreadId = null;
+      if (save && nextTitle && nextTitle !== thread.label) {
+        await renameThread(thread.id, nextTitle);
+        return;
+      }
+      updateThreadList(getCurrentThread());
+    };
+
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        finish(true);
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(false);
+      }
+    });
+    input.addEventListener("blur", () => finish(true));
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+    return input;
+  }
+
+  const label = document.createElement("button");
+  label.className = "thread-label";
+  label.title = thread.label || "New Session";
+  const text = document.createElement("span");
+  text.className = "thread-label-text";
+  text.textContent = thread.label || "New Session";
+  label.appendChild(text);
+  label.addEventListener("click", () => {
+    setCurrentThread(thread.id);
+    updateThreadList(thread.id);
+    loadHistory(thread.id);
+  });
+  label.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    editingThreadId = thread.id;
+    updateThreadList(getCurrentThread());
+  });
+  return label;
+}
+
+function upsertThread(threadId, label, message, titleSource = "auto") {
   const threads = loadThreads();
   let thread = threads.find((t) => t.id === threadId);
   if (!thread) {
-    thread = { id: threadId, label: label || "New Session", messages: [] };
+    thread = {
+      id: threadId,
+      label: label || "New Session",
+      titleSource,
+      messages: [],
+    };
     threads.unshift(thread);
+  } else if (!thread.titleSource) {
+    thread.titleSource = titleSource;
   }
   if (message) {
     thread.messages.push(message);
   }
-  if (
-    message &&
-    message.role === "user" &&
-    (!thread.label ||
-      thread.label === "New Session" ||
-      thread.label.startsWith("Session "))
-  ) {
-    thread.label = summarizeTitle(message.content);
-  }
   saveThreads(threads);
+}
+
+function applyThreadTitle(threadId, title, titleSource = "auto") {
+  updateCachedThread(threadId, {
+    label: title || "New Session",
+    titleSource,
+  });
+  updateThreadList(getCurrentThread());
+}
+
+async function renameThread(threadId, title) {
+  const previous = loadThreads().find((thread) => thread.id === threadId);
+  applyThreadTitle(threadId, title, "manual");
+  try {
+    const res = await fetch(`/api/thread/${threadId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) throw new Error("Rename failed");
+    const data = await res.json();
+    applyThreadTitle(threadId, data.title, data.title_source || "manual");
+  } catch {
+    if (previous) {
+      applyThreadTitle(threadId, previous.label, previous.titleSource || "auto");
+    }
+    alert("Failed to rename session.");
+  }
 }
 
 async function removeThread(threadId) {
@@ -343,7 +573,12 @@ async function createThread() {
   const res = await fetch("/api/thread", { method: "POST" });
   const data = await res.json();
   const threadId = data.thread_id;
-  upsertThread(threadId, "New Session");
+  upsertThread(
+    threadId,
+    data.title || "New Session",
+    null,
+    data.title_source || "auto",
+  );
   updateThreadList(threadId);
   setCurrentThread(threadId);
   loadHistory(threadId);
@@ -404,6 +639,13 @@ async function sendMessage() {
       if (payload.type === "thread") {
         threadId = payload.thread_id;
         setCurrentThread(threadId);
+        upsertThread(threadId, "New Session");
+        updateThreadList(threadId);
+        continue;
+      }
+
+      if (payload.type === "title") {
+        applyThreadTitle(threadId, payload.title, payload.title_source || "auto");
         updateThreadList(threadId);
         continue;
       }
@@ -479,6 +721,7 @@ newThreadBtn.addEventListener("click", async () => {
 });
 
 function init() {
+  initSidebarResize();
   const threads = loadThreads();
   if (threads.length === 0) {
     createThread();
@@ -488,13 +731,6 @@ function init() {
   setCurrentThread(current);
   loadHistory(current);
   updateThreadList(current);
-}
-
-function summarizeTitle(text) {
-  const cleaned = (text || "").replace(/\s+/g, " ").trim();
-  if (!cleaned) return "New Session";
-  if (cleaned.length <= 36) return cleaned;
-  return `${cleaned.slice(0, 36)}…`;
 }
 
 init();
