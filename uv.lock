@@ -2128,6 +2128,7 @@ dependencies = [
     { name = "langgraph-cli", extra = ["inmem"] },
     { name = "python-dotenv" },
     { name = "tavily-python" },
+    { name = "tinyfish" },
     { name = "uvicorn" },
 ]
 
@@ -2144,6 +2145,7 @@ requires-dist = [
     { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.1.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "tavily-python", specifier = ">=0.5.0" },
+    { name = "tinyfish", specifier = ">=0.1.0" },
     { name = "uvicorn", specifier = ">=0.30.0" },
 ]
 
@@ -2480,6 +2482,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/28/c0/3c7a39ff68022ddfd7d93f3337ad90389a342f761c4d71de99a3ccc57857/tiktoken-0.12.0-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:54c891b416a0e36b8e2045b12b33dd66fb34a4fe7965565f1b482da50da3e86a", size = 1194908, upload-time = "2025-10-06T20:22:32.073Z" },
     { url = "https://files.pythonhosted.org/packages/ab/0d/c1ad6f4016a3968c048545f5d9b8ffebf577774b2ede3e2e352553b685fe/tiktoken-0.12.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:5edb8743b88d5be814b1a8a8854494719080c28faaa1ccbef02e87354fe71ef0", size = 1253706, upload-time = "2025-10-06T20:22:33.385Z" },
     { url = "https://files.pythonhosted.org/packages/af/df/c7891ef9d2712ad774777271d39fdef63941ffba0a9d59b7ad1fd2765e57/tiktoken-0.12.0-cp314-cp314t-win_amd64.whl", hash = "sha256:f61c0aea5565ac82e2ec50a05e02a6c44734e91b51c10510b084ea1b8e633a71", size = 920667, upload-time = "2025-10-06T20:22:34.444Z" },
+]
+
+[[package]]
+name = "tinyfish"
+version = "0.2.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "tenacity" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/bf/ff5676fde1a9ad9183a127a5135a57736d114266bded4ae38f1d01cf9663/tinyfish-0.2.5.tar.gz", hash = "sha256:841095d97620e90afb49f97fae1ec8dc88dec78a8ee352c93252635f901a2fba", size = 58998, upload-time = "2026-04-03T01:02:16.533Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/a6/6ab83742e0074bdcbad5527bc451c7497dca1836a5153dfb0e6f28eb6227/tinyfish-0.2.5-py3-none-any.whl", hash = "sha256:05a763f10bdb7be958df4203010d321aecaf767cf64472ea3f48fe28c00cf921", size = 28056, upload-time = "2026-04-03T01:02:15.525Z" },
 ]
 
 [[package]]

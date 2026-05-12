@@ -15,6 +15,7 @@ dependencies = [
   "langfuse>=3.0.0",
   "python-dotenv>=1.0.0",
   "tavily-python>=0.5.0",
+  "tinyfish>=0.1.0",
   "fastapi>=0.115.0",
   "uvicorn>=0.30.0",
 ]

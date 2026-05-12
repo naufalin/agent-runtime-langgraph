@@ -250,6 +250,50 @@ def _convert_temperature(value: float, from_unit: str, to_unit: str) -> float:
     raise ValueError("Unsupported temperature unit")
 
 
+def _tinyfish_config_error() -> str | None:
+    if os.getenv("TINYFISH_API_KEY"):
+        return None
+    return "TinyFish is not configured. Set TINYFISH_API_KEY in the environment."
+
+
+def _tinyfish_client():
+    try:
+        from tinyfish import TinyFish
+    except ImportError as exc:
+        raise RuntimeError(
+            "TinyFish SDK is not installed. Run `uv sync` to install dependencies."
+        ) from exc
+    return TinyFish()
+
+
+def _to_jsonable(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, list | tuple):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if hasattr(value, "model_dump"):
+        return _to_jsonable(value.model_dump())
+    if hasattr(value, "dict"):
+        return _to_jsonable(value.dict())
+    if hasattr(value, "__dict__"):
+        return _to_jsonable(
+            {
+                key: item
+                for key, item in vars(value).items()
+                if not key.startswith("_")
+            }
+        )
+    return str(value)
+
+
+def _truncate_text(text: str | None, max_chars: int) -> str | None:
+    if text is None or len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "..."
+
+
 @tool
 def get_weather(location: str) -> str:
     """Get the current weather for a location via Open-Meteo."""
@@ -374,6 +418,77 @@ def page_reader(url: str, max_chars: int = 4000) -> str:
 
 
 @tool
+def tinyfish_search(
+    query: str, location: str = "US", language: str = "en"
+) -> dict | str:
+    """Search the web with TinyFish and return ranked results."""
+    config_error = _tinyfish_config_error()
+    if config_error:
+        return config_error
+
+    try:
+        result = _tinyfish_client().search.query(
+            query=query,
+            location=location,
+            language=language,
+        )
+        return _to_jsonable(result)
+    except Exception as exc:  # noqa: BLE001 - best-effort tool
+        return f"TinyFish search failed: {exc}"
+
+
+@tool
+def tinyfish_fetch(
+    urls: list[str], format: str = "markdown", max_chars: int = 6000
+) -> dict | str:
+    """Render URLs with TinyFish and return clean extracted page content."""
+    config_error = _tinyfish_config_error()
+    if config_error:
+        return config_error
+
+    try:
+        result = _tinyfish_client().fetch.get_contents(urls=urls, format=format)
+        pages = []
+        for page in getattr(result, "results", []) or []:
+            pages.append(
+                {
+                    "url": getattr(page, "url", None),
+                    "final_url": getattr(page, "final_url", None),
+                    "title": getattr(page, "title", None),
+                    "description": getattr(page, "description", None),
+                    "language": getattr(page, "language", None),
+                    "text": _truncate_text(getattr(page, "text", None), max_chars),
+                }
+            )
+        errors = [_to_jsonable(error) for error in getattr(result, "errors", []) or []]
+        return {"results": pages, "errors": errors}
+    except Exception as exc:  # noqa: BLE001 - best-effort tool
+        return f"TinyFish fetch failed: {exc}"
+
+
+@tool
+def tinyfish_agent(url: str, goal: str) -> dict | str:
+    """Use TinyFish to execute a goal-driven workflow on a real website."""
+    config_error = _tinyfish_config_error()
+    if config_error:
+        return config_error
+
+    try:
+        result = _tinyfish_client().agent.run(url=url, goal=goal)
+        data = _to_jsonable(result)
+        if isinstance(data, dict):
+            return {
+                "run_id": data.get("run_id") or data.get("id"),
+                "status": data.get("status"),
+                "result": data.get("result_json") or data.get("result"),
+                "error": data.get("error"),
+            }
+        return {"result": data}
+    except Exception as exc:  # noqa: BLE001 - best-effort tool
+        return f"TinyFish agent failed: {exc}"
+
+
+@tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Send an email via SMTP. Requires SMTP_* env configuration."""
     smtp_host = os.getenv("SMTP_HOST")
@@ -414,6 +529,9 @@ TOOLS = [
     calculator,
     unit_converter,
     page_reader,
+    tinyfish_search,
+    tinyfish_fetch,
+    tinyfish_agent,
     send_email,
     tavily_search,
 ]
