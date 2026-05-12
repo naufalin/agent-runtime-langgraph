@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ReAct Agent Runtime">
+  <rect width="64" height="64" rx="14" fill="#fffaf5"/>
+  <path
+    d="M21 38c2.8 5.2 7.5 7.8 13.9 7.8 8.9 0 15.6-6.6 15.6-15.6 0-7.6-5.4-13.8-12.8-15.2"
+    fill="none"
+    stroke="#f0d2bd"
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+  <path
+    d="M32 18L20 34l14 12 14-16z"
+    fill="none"
+    stroke="#b84a1b"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M27 35l4 3-4 3"
+    fill="none"
+    stroke="#1b1b1b"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path d="M34 42h7" stroke="#1b1b1b" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="32" cy="18" r="6" fill="#3b82f6"/>
+  <circle cx="20" cy="34" r="6" fill="#8e3815"/>
+  <circle cx="48" cy="30" r="6" fill="#b84a1b"/>
+  <circle cx="34" cy="46" r="5.5" fill="#fffaf5" stroke="#8e3815" stroke-width="3"/>
+</svg>
